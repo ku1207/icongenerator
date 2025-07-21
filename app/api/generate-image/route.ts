@@ -287,6 +287,7 @@ async function combineImages(base64Images: string[], prompt: string): Promise<st
     const imageInputs = base64Images.map((base64) => ({
       type: "input_image" as const,
       image_url: `data:image/jpeg;base64,${base64}`,
+      detail: "high" as const
     }));
 
     const response = await openai.responses.create({
@@ -328,6 +329,7 @@ async function combineImages(base64Images: string[], prompt: string): Promise<st
       const imageInputs = base64Images.map((base64) => ({
         type: "input_image" as const,
         image_url: `data:image/jpeg;base64,${base64}`,
+        detail: "high" as const
       }));
 
       const response = await openai.responses.create({
@@ -402,6 +404,7 @@ async function modifyImage(base64Image: string, prompt: string): Promise<string>
             {
               type: "input_image",
               image_url: `data:image/jpeg;base64,${base64Image}`,
+              detail: "high"
             },
           ],
         },
@@ -433,6 +436,7 @@ async function modifyImage(base64Image: string, prompt: string): Promise<string>
               {
                 type: "input_image",
                 image_url: `data:image/jpeg;base64,${base64Image}`,
+                detail: "high"
               },
             ],
           },
