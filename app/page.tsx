@@ -28,9 +28,9 @@ export default function Home() {
       case '이미지 생성':
         return '생성하고자 하는 이미지를 묘사해 주세요.'
       case '이미지 변경':
-        return '이미지에서 변경하고자 하는 것을 묘사해 주세요.'
+        return '이미지에서 변경하고자 하는 것을 구체적으로 묘사해 주세요. (예: 배경을 바다로 변경, 옷 색깔을 빨간색으로 변경)'
       case '이미지 결합':
-        return '어떠한 이미지로 합성하고자 하는 지를 묘사해 주세요.'
+        return '어떠한 방식으로 이미지들을 합성하고자 하는지 묘사해 주세요.'
       default:
         return ''
     }
@@ -38,9 +38,9 @@ export default function Home() {
 
   const getImageUploadText = () => {
     if (selectedType === '이미지 변경') {
-      return '이미지 1개를 업로드해주세요'
+      return '변경할 이미지 1개를 업로드해주세요'
     } else if (selectedType === '이미지 결합') {
-      return '이미지 2-4개를 업로드해주세요'
+      return '합성할 이미지 2-4개를 업로드해주세요'
     }
     return ''
   }
@@ -63,9 +63,9 @@ export default function Home() {
       case '이미지 생성':
         return '텍스트 설명만으로 새로운 이미지를 생성합니다'
       case '이미지 변경':
-        return '기존 이미지를 원하는 스타일로 변경합니다'
+        return '기존 이미지의 구조를 유지하면서 원하는 부분만 정교하게 변경합니다'
       case '이미지 결합':
-        return '여러 이미지를 창의적으로 합성합니다'
+        return '여러 이미지의 특성을 분석하여 자연스럽게 합성합니다'
       default:
         return ''
     }
@@ -116,16 +116,18 @@ export default function Home() {
         )
       }
 
+      const requestBody = {
+        type: selectedType,
+        prompt: textInput,
+        images: base64Images
+      }
+
       const response = await fetch('/api/generate-image', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          type: selectedType,
-          prompt: textInput,
-          images: base64Images
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       const data = await response.json()
@@ -178,6 +180,11 @@ export default function Home() {
               <option value="이미지 변경">🎨 이미지 변경</option>
               <option value="이미지 결합">🔄 이미지 결합</option>
             </select>
+            
+            {/* 생성 방식 설명 */}
+            <p className="text-xs text-gray-600 mt-2 leading-relaxed">
+              {getTypeDescription(selectedType)}
+            </p>
           </div>
 
           {/* 이미지 업로드 영역 (이미지 변경, 결합 시에만 표시) */}
@@ -241,6 +248,11 @@ export default function Home() {
               rows={5}
               className="w-full p-4 bg-white/70 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all duration-200 font-medium placeholder:text-gray-500"
             />
+            {(selectedType === '이미지 변경' || selectedType === '이미지 결합') && (
+              <p className="text-xs text-blue-600 mt-2 leading-relaxed">
+                💡 AI가 업로드된 이미지를 자동으로 분석하여 유지할 요소와 변경할 요소를 지능적으로 구분합니다.
+              </p>
+            )}
           </div>
 
           {/* 에러 메시지 */}
@@ -259,7 +271,11 @@ export default function Home() {
             {isGenerating ? (
               <div className="flex items-center justify-center space-x-2">
                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                <span>이미지 생성 중...</span>
+                <span>
+                  {selectedType === '이미지 변경' ? '이미지 분석 및 변경 중...' : 
+                   selectedType === '이미지 결합' ? '이미지 분석 및 합성 중...' : 
+                   '이미지 생성 중...'}
+                </span>
               </div>
             ) : (
               <div className="flex items-center justify-center space-x-2">
@@ -286,7 +302,11 @@ export default function Home() {
                      <Sparkles className="h-12 w-12 text-purple-600 animate-spin" />
                    </div>
                    <h2 className="text-2xl font-bold text-gray-800 mb-3">AI가 이미지를 생성하고 있습니다</h2>
-                   <p className="text-gray-600 font-medium">잠시만 기다려주세요...</p>
+                   <p className="text-gray-600 font-medium">
+                     {selectedType === '이미지 변경' ? '업로드된 이미지를 분석하여 정교하게 변경하는 중입니다...' :
+                      selectedType === '이미지 결합' ? '이미지들을 분석하여 자연스럽게 합성하는 중입니다...' :
+                      '잠시만 기다려주세요...'}
+                   </p>
                    <div className="mt-8 flex items-center justify-center space-x-1">
                      {[...Array(8)].map((_, i) => (
                        <div

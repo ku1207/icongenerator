@@ -8,6 +8,17 @@ const openai = new OpenAI({
 // 구조화된 프롬프트 생성을 위한 헬퍼 함수
 async function generateStructuredPrompt(userPrompt: string, type: 'generation' | 'modification' | 'combination', baseImage?: string, baseImages?: string[]): Promise<string> {
   try {
+    // 이미지 변경/결합 모드에서는 먼저 이미지를 분석
+    let imageAnalysis = '';
+    
+    if (type === 'modification' && baseImage) {
+      // 단일 이미지 분석 (이미지 변경)
+      imageAnalysis = await analyzeImageForModification(baseImage);
+    } else if (type === 'combination' && baseImages && baseImages.length > 0) {
+      // 다중 이미지 분석 (이미지 결합)
+      imageAnalysis = await analyzeImagesForCombination(baseImages);
+    }
+
     let systemPrompt = '';
     
     if (type === 'generation') {
@@ -40,7 +51,10 @@ async function generateStructuredPrompt(userPrompt: string, type: 'generation' |
 ${userPrompt}`;
     } else if (type === 'modification') {
       systemPrompt = `###지시사항
-아래 정보들을 기반으로 이미지 생성 프롬프트를 기입하십시오.
+업로드된 이미지를 분석한 결과와 사용자의 변경 요청을 바탕으로 정교한 이미지 변경 프롬프트를 생성하십시오.
+
+###이미지 분석 결과
+${imageAnalysis}
 
 ###작성지침
 1. 전체 구조
@@ -49,32 +63,26 @@ ${userPrompt}`;
  - 최상위 키는 **imagePrompt**만 존재합니다.
 
 2. 작성 규칙
- - 가장 먼저 **주제나 장면**을 명확히 서술하십시오. (예: "우주를 여행하는 고양이")
- - **스타일이나 화풍**을 구체적으로 지정하십시오. (예: "지브리 스타일", "고흐 풍 유화")
- - **구도나 시점** 정보를 포함하십시오. (예: "로우 앵글", "탑뷰", "풀바디 샷" 등)
- - **조명, 색감, 배경** 요소를 한 문장으로 요약하십시오. (예: "따뜻한 노을빛 조명, 파스텔톤, 눈 덮인 마을")
- - **디테일 수준 및 재질감**을 설명하십시오. (예: "하이퍼리얼한 8K 질감", "매끄러운 금속 표면")
- - **감정·분위기·스토리성**이 드러나는 형용사를 포함하십시오. (예: "몽환적이고 평화로운", "긴장감 도는 디스토피아")
- - **제외하고 싶은 요소**는 부정 프롬프트로 따로 적으십시오. (예: "노 워터마크, 노 왜곡")
- - 모든 요소는 쉼표(,)로 구분된 간결한 명사구로 구성하십시오.
- - 우선순위가 높은 핵심 요소는 문장 앞에 배치하십시오.
+ - **유지할 요소**: 이미지 분석 결과에서 변경 요청과 관련 없는 모든 요소들을 명시적으로 보존하도록 지시
+ - **변경할 요소**: 사용자가 요청한 변경 사항만 구체적으로 적용
+ - **구조 보존**: 기존 이미지의 전체적인 구도, 비율, 레이아웃은 최대한 유지
+ - **자연스러운 통합**: 변경된 부분이 기존 요소들과 자연스럽게 어우러지도록 처리
+ - 프롬프트는 "기존 이미지에서 [유지할 요소들]은 그대로 유지하면서, [변경할 요소]만 [변경 내용]으로 수정" 형태로 구성
 
 ###출력형태
 {
   "imagePrompt": "<imageprompt>"
 }
-
-###업로드 이미지
-{{이미지}}
 
 ###변경 요청
 ${userPrompt}`;
     } else if (type === 'combination') {
       const imageCount = baseImages?.length || 0;
-      const imagePlaceholders = Array.from({length: imageCount}, (_, i) => `{{업로드 이미지${i + 1}}}`).join('\n');
-      
       systemPrompt = `###지시사항
-아래 정보들을 기반으로 이미지 생성 프롬프트를 기입하십시오.
+업로드된 ${imageCount}개 이미지들을 분석한 결과와 사용자의 합성 요청을 바탕으로 자연스러운 이미지 결합 프롬프트를 생성하십시오.
+
+###이미지 분석 결과
+${imageAnalysis}
 
 ###작성지침
 1. 전체 구조
@@ -83,23 +91,16 @@ ${userPrompt}`;
  - 최상위 키는 **imagePrompt**만 존재합니다.
 
 2. 작성 규칙
- - 가장 먼저 **주제나 장면**을 명확히 서술하십시오. (예: "우주를 여행하는 고양이")
- - **스타일이나 화풍**을 구체적으로 지정하십시오. (예: "지브리 스타일", "고흐 풍 유화")
- - **구도나 시점** 정보를 포함하십시오. (예: "로우 앵글", "탑뷰", "풀바디 샷" 등)
- - **조명, 색감, 배경** 요소를 한 문장으로 요약하십시오. (예: "따뜻한 노을빛 조명, 파스텔톤, 눈 덮인 마을")
- - **디테일 수준 및 재질감**을 설명하십시오. (예: "하이퍼리얼한 8K 질감", "매끄러운 금속 표면")
- - **감정·분위기·스토리성**이 드러나는 형용사를 포함하십시오. (예: "몽환적이고 평화로운", "긴장감 도는 디스토피아")
- - **제외하고 싶은 요소**는 부정 프롬프트로 따로 적으십시오. (예: "노 워터마크, 노 왜곡")
- - 모든 요소는 쉼표(,)로 구분된 간결한 명사구로 구성하십시오.
- - 우선순위가 높은 핵심 요소는 문장 앞에 배치하십시오.
+ - **각 이미지의 핵심 요소**: 분석 결과에서 각 이미지의 특징적인 요소들을 추출
+ - **합성 방식**: 사용자 요청에 따라 어떤 요소를 어떻게 결합할지 명시
+ - **조화로운 통합**: 서로 다른 이미지의 요소들이 자연스럽게 어우러지는 장면 구성
+ - **스타일 통일**: 최종 이미지의 일관된 스타일과 분위기 설정
+ - 프롬프트는 "이미지1의 [요소], 이미지2의 [요소]를 [합성 방식]으로 결합하여 [최종 장면] 생성" 형태로 구성
 
 ###출력형태
 {
   "imagePrompt": "<imageprompt>"
 }
-
-###업로드 이미지 목록
-${imagePlaceholders}
 
 ###결합 요청
 ${userPrompt}`;
@@ -156,10 +157,21 @@ ${userPrompt}`;
     const content = response.choices[0].message.content;
     if (content) {
       try {
-        const parsed = JSON.parse(content);
+        // 코드 블록 제거 및 JSON 파싱
+        let cleanContent = content.trim();
+        
+        // ```json으로 시작하고 ```로 끝나는 경우 제거
+        if (cleanContent.startsWith('```json')) {
+          cleanContent = cleanContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (cleanContent.startsWith('```')) {
+          cleanContent = cleanContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+        
+        const parsed = JSON.parse(cleanContent);
         return parsed.imagePrompt || userPrompt;
       } catch (parseError) {
         console.error('JSON 파싱 실패:', parseError);
+        console.error('원본 응답:', content);
         return userPrompt;
       }
     }
@@ -171,14 +183,103 @@ ${userPrompt}`;
   }
 }
 
+// 단일 이미지 분석 함수 (이미지 변경용)
+async function analyzeImageForModification(base64Image: string): Promise<string> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `이 이미지를 자세히 분석하여 다음 정보를 제공해주세요:
+
+1. **주요 객체/인물**: 이미지의 핵심이 되는 대상들
+2. **배경 환경**: 배경의 종류, 설정, 분위기
+3. **색상 팔레트**: 주요 색상들과 색조
+4. **조명과 그림자**: 빛의 방향, 강도, 분위기
+5. **구도와 시점**: 카메라 앵글, 프레이밍
+6. **스타일과 질감**: 아트 스타일, 재질감
+7. **세부 요소**: 액세서리, 장식, 기타 특징
+
+분석 결과를 자연스러운 문장으로 작성해주세요.`
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${base64Image}`,
+                detail: "high"
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 600,
+      temperature: 0.3
+    });
+
+    return response.choices[0].message.content || "이미지 분석에 실패했습니다.";
+  } catch (error) {
+    console.error('이미지 분석 실패:', error);
+    return "이미지 분석에 실패했습니다.";
+  }
+}
+
+// 다중 이미지 분석 함수 (이미지 결합용)
+async function analyzeImagesForCombination(base64Images: string[]): Promise<string> {
+  try {
+    const imageContent = base64Images.map((image, index) => ({
+      type: "image_url" as const,
+      image_url: {
+        url: `data:image/jpeg;base64,${image}`,
+        detail: "high" as const
+      }
+    }));
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `${base64Images.length}개의 이미지를 분석하여 각각의 특징을 정리해주세요:
+
+각 이미지마다 다음 정보를 제공해주세요:
+1. **주요 객체/인물**: 이미지의 핵심 요소
+2. **배경과 환경**: 설정과 분위기
+3. **색상과 스타일**: 색조와 아트 스타일
+4. **합성 가능한 요소**: 다른 이미지와 결합할 수 있는 부분
+5. **유니크한 특징**: 이 이미지만의 독특한 요소
+
+결과는 "이미지 1: [분석내용], 이미지 2: [분석내용]..." 형태로 정리해주세요.`
+            },
+            ...imageContent
+          ]
+        }
+      ],
+      max_tokens: 800,
+      temperature: 0.3
+    });
+
+    return response.choices[0].message.content || "이미지 분석에 실패했습니다.";
+  } catch (error) {
+    console.error('이미지 분석 실패:', error);
+    return "이미지 분석에 실패했습니다.";
+  }
+}
+
 // 이미지 합성을 위한 헬퍼 함수 (gpt-4.1 API 사용)
 async function combineImages(base64Images: string[], prompt: string): Promise<string> {
   try {
-    // 먼저 구조화된 프롬프트 생성
+    // 구조화된 프롬프트 생성 (실제로는 원본 프롬프트 반환)
     const enhancedPrompt = await generateStructuredPrompt(
-      `Create a composite image combining elements from ${base64Images.length} different source images. ${prompt}`, 
+      prompt, 
       'combination',
-      undefined, // baseImage는 여기서는 사용되지 않음
+      undefined,
       base64Images
     );
 
@@ -218,9 +319,9 @@ async function combineImages(base64Images: string[], prompt: string): Promise<st
     // gpt-4.1이 실패하면 gpt-4.1-mini로 재시도
     try {
       const enhancedPrompt = await generateStructuredPrompt(
-        `Create a composite image combining elements from ${base64Images.length} different source images. ${prompt}`, 
+        prompt, 
         'combination',
-        undefined, // baseImage는 여기서는 사용되지 않음
+        undefined,
         base64Images
       );
 
@@ -258,9 +359,9 @@ async function combineImages(base64Images: string[], prompt: string): Promise<st
       
       // 모든 새로운 API가 실패하면 DALL-E 3로 대체
       const fallbackPrompt = await generateStructuredPrompt(
-        `Create a composite image combining elements from ${base64Images.length} different source images. ${prompt}`, 
+        prompt, 
         'combination',
-        undefined, // baseImage는 여기서는 사용되지 않음
+        undefined,
         base64Images
       );
       
@@ -287,7 +388,7 @@ async function combineImages(base64Images: string[], prompt: string): Promise<st
 // 이미지 변경을 위한 헬퍼 함수 (gpt-4.1 API 사용)
 async function modifyImage(base64Image: string, prompt: string): Promise<string> {
   try {
-    // 구조화된 프롬프트 생성 (이미지 포함)
+    // 구조화된 프롬프트 생성 (실제로는 원본 프롬프트 반환)
     const enhancedPrompt = await generateStructuredPrompt(prompt, 'modification', base64Image);
 
     // gpt-4.1 API로 이미지 변경
@@ -458,7 +559,6 @@ export async function POST(req: NextRequest) {
         });
 
       case '이미지 변경':
-        // gpt-4.1 API를 우선으로 한 이미지 변경
         if (!images || images.length === 0) {
           return NextResponse.json(
             { error: '편집할 이미지가 필요합니다.' },
@@ -475,7 +575,6 @@ export async function POST(req: NextRequest) {
         });
 
       case '이미지 결합':
-        // gpt-4.1 API를 우선으로 한 이미지 결합
         if (!images || images.length < 2) {
           return NextResponse.json(
             { error: '결합할 이미지가 최소 2개 필요합니다.' },
@@ -520,6 +619,28 @@ export async function POST(req: NextRequest) {
           details: '잠시 후 다시 시도해주세요.'
         },
         { status: 429 }
+      );
+    }
+
+    // 콘텐츠 정책 위반 처리
+    if (error?.status === 400 && error?.code === 'content_policy_violation') {
+      return NextResponse.json(
+        { 
+          error: '요청이 콘텐츠 정책에 위반됩니다.',
+          details: '더 안전하고 적절한 내용으로 다시 시도해주세요.'
+        },
+        { status: 400 }
+      );
+    }
+
+    // 조직 검증 필요 (gpt-image-1 모델)
+    if (error?.status === 403 && error?.message?.includes('organization must be verified')) {
+      return NextResponse.json(
+        { 
+          error: '해당 모델 사용을 위해서는 조직 검증이 필요합니다.',
+          details: 'OpenAI 플랫폼에서 조직을 검증해주세요.'
+        },
+        { status: 403 }
       );
     }
 
