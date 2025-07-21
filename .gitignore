@@ -1,0 +1,34 @@
+# 환경변수 파일 (API 키 등 보안 정보)
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Next.js 빌드 출력
+/.next/
+/out/
+
+# 의존성 모듈
+/node_modules
+
+# 로그 파일
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 운영체제 파일
+.DS_Store
+Thumbs.db
+
+# IDE/Editor 파일
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Vercel 배포
+.vercel
+
+# TypeScript 빌드 정보
+*.tsbuildinfo
+next-env.d.ts 
