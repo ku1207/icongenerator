@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-})
+// OpenAI 클라이언트를 런타임에 생성하는 헬퍼 함수
+function getOpenAIClient() {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY 환경변수가 설정되지 않았습니다.')
+  }
+  
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+  })
+}
 
 // 구조화된 프롬프트 생성을 위한 헬퍼 함수
 async function generateStructuredPrompt(userPrompt: string, type: 'generation' | 'modification' | 'combination', baseImage?: string, baseImages?: string[]): Promise<string> {
@@ -147,6 +154,7 @@ ${userPrompt}`;
     }
 
     // 최신 GPT-4 모델 사용
+    const openai = getOpenAIClient()
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: messages as any,
@@ -186,6 +194,7 @@ ${userPrompt}`;
 // 단일 이미지 분석 함수 (이미지 변경용)
 async function analyzeImageForModification(base64Image: string): Promise<string> {
   try {
+    const openai = getOpenAIClient()
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -238,6 +247,7 @@ async function analyzeImagesForCombination(base64Images: string[]): Promise<stri
       }
     }));
 
+    const openai = getOpenAIClient()
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -282,6 +292,8 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
+
+    const openai = getOpenAIClient()
 
     switch (type) {
       case '이미지 생성':
