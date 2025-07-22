@@ -146,9 +146,9 @@ ${userPrompt}`;
       });
     }
 
-    // 최신 GPT-4 모델 사용 (gpt-4-vision-preview 대신)
+    // 최신 GPT-4 모델 사용
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",  // 최신 모델 사용
+      model: "gpt-4o",
       messages: messages as any,
       max_tokens: 800,
       temperature: 0.7,
@@ -272,211 +272,6 @@ async function analyzeImagesForCombination(base64Images: string[]): Promise<stri
   }
 }
 
-// 이미지 합성을 위한 헬퍼 함수 (gpt-4.1 API 사용)
-async function combineImages(base64Images: string[], prompt: string): Promise<string> {
-  try {
-    // 구조화된 프롬프트 생성 (실제로는 원본 프롬프트 반환)
-    const enhancedPrompt = await generateStructuredPrompt(
-      prompt, 
-      'combination',
-      undefined,
-      base64Images
-    );
-
-    // gpt-4.1 API로 이미지 결합
-    const imageInputs = base64Images.map((base64) => ({
-      type: "input_image" as const,
-      image_url: `data:image/jpeg;base64,${base64}`,
-      detail: "high" as const
-    }));
-
-    const response = await openai.responses.create({
-      model: "gpt-4.1",
-      input: [
-        {
-          role: "user",
-          content: [
-            { 
-              type: "input_text", 
-              text: enhancedPrompt
-            },
-            ...imageInputs
-          ],
-        },
-      ],
-      tools: [{ type: "image_generation" }],
-    });
-
-    const imageGenerationCalls = response.output.filter(
-      (output) => output.type === "image_generation_call"
-    );
-
-    if (imageGenerationCalls.length > 0) {
-      return imageGenerationCalls[0].result;
-    }
-  } catch (error) {
-    console.error('gpt-4.1 API 실패, gpt-4.1-mini로 재시도:', error);
-    
-    // gpt-4.1이 실패하면 gpt-4.1-mini로 재시도
-    try {
-      const enhancedPrompt = await generateStructuredPrompt(
-        prompt, 
-        'combination',
-        undefined,
-        base64Images
-      );
-
-      const imageInputs = base64Images.map((base64) => ({
-        type: "input_image" as const,
-        image_url: `data:image/jpeg;base64,${base64}`,
-        detail: "high" as const
-      }));
-
-      const response = await openai.responses.create({
-        model: "gpt-4.1-mini",
-        input: [
-          {
-            role: "user",
-            content: [
-              { 
-                type: "input_text", 
-                text: enhancedPrompt
-              },
-              ...imageInputs
-            ],
-          },
-        ],
-        tools: [{ type: "image_generation" }],
-      });
-
-      const imageGenerationCalls = response.output.filter(
-        (output) => output.type === "image_generation_call"
-      );
-
-      if (imageGenerationCalls.length > 0) {
-        return imageGenerationCalls[0].result;
-      }
-    } catch (miniError) {
-      console.error('gpt-4.1-mini도 실패, DALL-E 3로 대체:', miniError);
-      
-      // 모든 새로운 API가 실패하면 DALL-E 3로 대체
-      const fallbackPrompt = await generateStructuredPrompt(
-        prompt, 
-        'combination',
-        undefined,
-        base64Images
-      );
-      
-      const result = await openai.images.generate({
-        model: 'dall-e-3',
-        prompt: fallbackPrompt,
-        n: 1,
-        response_format: 'b64_json',
-        quality: 'hd',
-        size: '1024x1024'
-      });
-
-      if (!result.data || !result.data[0] || !result.data[0].b64_json) {
-        throw new Error('이미지 결합에 실패했습니다.');
-      }
-
-      return result.data[0].b64_json;
-    }
-  }
-
-  throw new Error('이미지 결합에 실패했습니다.');
-}
-
-// 이미지 변경을 위한 헬퍼 함수 (gpt-4.1 API 사용)
-async function modifyImage(base64Image: string, prompt: string): Promise<string> {
-  try {
-    // 구조화된 프롬프트 생성 (실제로는 원본 프롬프트 반환)
-    const enhancedPrompt = await generateStructuredPrompt(prompt, 'modification', base64Image);
-
-    // gpt-4.1 API로 이미지 변경
-    const response = await openai.responses.create({
-      model: "gpt-4.1",
-      input: [
-        {
-          role: "user",
-          content: [
-            { type: "input_text", text: enhancedPrompt },
-            {
-              type: "input_image",
-              image_url: `data:image/jpeg;base64,${base64Image}`,
-              detail: "high"
-            },
-          ],
-        },
-      ],
-      tools: [{ type: "image_generation" }],
-    });
-
-    const imageGenerationCalls = response.output.filter(
-      (output) => output.type === "image_generation_call"
-    );
-
-    if (imageGenerationCalls.length > 0) {
-      return imageGenerationCalls[0].result;
-    }
-  } catch (error) {
-    console.error('gpt-4.1 API 실패, gpt-4.1-mini로 재시도:', error);
-    
-    try {
-      // gpt-4.1-mini로 재시도
-      const enhancedPrompt = await generateStructuredPrompt(prompt, 'modification', base64Image);
-
-      const response = await openai.responses.create({
-        model: "gpt-4.1-mini",
-        input: [
-          {
-            role: "user",
-            content: [
-              { type: "input_text", text: enhancedPrompt },
-              {
-                type: "input_image",
-                image_url: `data:image/jpeg;base64,${base64Image}`,
-                detail: "high"
-              },
-            ],
-          },
-        ],
-        tools: [{ type: "image_generation" }],
-      });
-
-      const imageGenerationCalls = response.output.filter(
-        (output) => output.type === "image_generation_call"
-      );
-
-      if (imageGenerationCalls.length > 0) {
-        return imageGenerationCalls[0].result;
-      }
-    } catch (miniError) {
-      console.error('gpt-4.1-mini도 실패, DALL-E 3로 대체:', miniError);
-      
-      // 모든 새로운 API가 실패하면 DALL-E 3로 대체
-      const fallbackPrompt = await generateStructuredPrompt(prompt, 'modification', base64Image);
-      
-      const result = await openai.images.generate({
-        model: 'dall-e-3',
-        prompt: fallbackPrompt,
-        n: 1,
-        response_format: 'b64_json',
-        quality: 'hd',
-        size: '1024x1024'
-      });
-
-      if (!result.data || !result.data[0] || !result.data[0].b64_json) {
-        throw new Error('이미지 변경에 실패했습니다.');
-      }
-
-      return result.data[0].b64_json;
-    }
-  }
-
-  throw new Error('이미지 변경에 실패했습니다.');
-}
-
 export async function POST(req: NextRequest) {
   try {
     const { type, prompt, images } = await req.json()
@@ -490,59 +285,10 @@ export async function POST(req: NextRequest) {
 
     switch (type) {
       case '이미지 생성':
-        try {
-          // gpt-4.1 API로 이미지 생성
-          const enhancedPrompt = await generateStructuredPrompt(prompt, 'generation');
-          
-          const response = await openai.responses.create({
-            model: "gpt-4.1",
-            input: enhancedPrompt,
-            tools: [{ type: "image_generation" }],
-          });
-
-          const imageGenerationCalls = response.output.filter(
-            (output) => output.type === "image_generation_call"
-          );
-
-          if (imageGenerationCalls.length > 0) {
-            return NextResponse.json({
-              success: true,
-              image: imageGenerationCalls[0].result,
-              type: type
-            });
-          }
-        } catch (newApiError) {
-          console.error('gpt-4.1 실패, gpt-4.1-mini로 재시도:', newApiError);
-          
-          try {
-            // gpt-4.1-mini로 재시도
-            const enhancedPrompt = await generateStructuredPrompt(prompt, 'generation');
-            
-            const response = await openai.responses.create({
-              model: "gpt-4.1-mini",
-              input: enhancedPrompt,
-              tools: [{ type: "image_generation" }],
-            });
-
-            const imageGenerationCalls = response.output.filter(
-              (output) => output.type === "image_generation_call"
-            );
-
-            if (imageGenerationCalls.length > 0) {
-              return NextResponse.json({
-                success: true,
-                image: imageGenerationCalls[0].result,
-                type: type
-              });
-            }
-          } catch (miniError) {
-            console.error('gpt-4.1-mini도 실패, DALL-E 3로 대체:', miniError);
-          }
-        }
-
-        // 모든 새로운 API가 실패하면 DALL-E 3로 대체
+        // 구조화된 프롬프트 생성
         const enhancedPrompt = await generateStructuredPrompt(prompt, 'generation');
         
+        // DALL-E 3를 사용하여 이미지 생성
         const result = await openai.images.generate({
           model: 'dall-e-3',
           prompt: enhancedPrompt,
@@ -570,11 +316,25 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        const modifiedImageBase64 = await modifyImage(images[0], prompt);
+        // 이미지 변경은 현재 DALL-E 3로만 처리 (업로드된 이미지 기반 프롬프트 생성)
+        const modificationPrompt = await generateStructuredPrompt(prompt, 'modification', images[0]);
+        
+        const modifiedResult = await openai.images.generate({
+          model: 'dall-e-3',
+          prompt: modificationPrompt,
+          n: 1,
+          response_format: 'b64_json',
+          quality: 'hd',
+          size: '1024x1024'
+        });
+        
+        if (!modifiedResult.data || !modifiedResult.data[0] || !modifiedResult.data[0].b64_json) {
+          throw new Error('이미지 변경에 실패했습니다.');
+        }
         
         return NextResponse.json({
           success: true,
-          image: modifiedImageBase64,
+          image: modifiedResult.data[0].b64_json,
           type: type
         });
 
@@ -586,11 +346,25 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        const combinedImageBase64 = await combineImages(images, prompt);
+        // 이미지 결합도 현재 DALL-E 3로만 처리 (업로드된 이미지들 기반 프롬프트 생성)
+        const combinationPrompt = await generateStructuredPrompt(prompt, 'combination', undefined, images);
+        
+        const combinedResult = await openai.images.generate({
+          model: 'dall-e-3',
+          prompt: combinationPrompt,
+          n: 1,
+          response_format: 'b64_json',
+          quality: 'hd',
+          size: '1024x1024'
+        });
+        
+        if (!combinedResult.data || !combinedResult.data[0] || !combinedResult.data[0].b64_json) {
+          throw new Error('이미지 결합에 실패했습니다.');
+        }
         
         return NextResponse.json({
           success: true,
-          image: combinedImageBase64,
+          image: combinedResult.data[0].b64_json,
           type: type
         });
 
@@ -634,17 +408,6 @@ export async function POST(req: NextRequest) {
           details: '더 안전하고 적절한 내용으로 다시 시도해주세요.'
         },
         { status: 400 }
-      );
-    }
-
-    // 조직 검증 필요 (gpt-image-1 모델)
-    if (error?.status === 403 && error?.message?.includes('organization must be verified')) {
-      return NextResponse.json(
-        { 
-          error: '해당 모델 사용을 위해서는 조직 검증이 필요합니다.',
-          details: 'OpenAI 플랫폼에서 조직을 검증해주세요.'
-        },
-        { status: 403 }
       );
     }
 
