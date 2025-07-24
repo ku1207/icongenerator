@@ -282,16 +282,38 @@ async function analyzeImagesForCombination(base64Images: string[]): Promise<stri
   }
 }
 
+// OPTIONS 메서드 처리 (CORS preflight)
+export async function OPTIONS() {
+  const response = NextResponse.json({}, { status: 200 });
+  response.headers.set('Access-Control-Allow-Origin', '*');
+  response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  return response;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { type, prompt, images } = await req.json()
+    console.log('API 호출 시작')
+    const body = await req.json()
+    console.log('요청 본문:', body)
+    
+    const { type, prompt, images } = body
 
     if (!prompt) {
-      return NextResponse.json(
+      console.log('프롬프트가 없음')
+      const errorResponse = NextResponse.json(
         { error: '텍스트 설명이 필요합니다.' },
         { status: 400 }
-      )
+      );
+      errorResponse.headers.set('Access-Control-Allow-Origin', '*');
+      errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+      return errorResponse;
     }
+
+    console.log('요청 타입:', type)
+    console.log('프롬프트:', prompt)
+    console.log('이미지 개수:', images ? images.length : 0)
 
     const openai = getOpenAIClient()
 
@@ -300,25 +322,28 @@ export async function POST(req: NextRequest) {
         // 구조화된 프롬프트 생성
         const enhancedPrompt = await generateStructuredPrompt(prompt, 'generation');
         
-        // DALL-E 3를 사용하여 이미지 생성
+        // gpt-image-1을 사용하여 이미지 생성
         const result = await openai.images.generate({
-          model: 'dall-e-3',
-          prompt: enhancedPrompt,
-          n: 1,
-          response_format: 'b64_json',
-          quality: 'hd',
-          size: '1024x1024'
+          model: 'gpt-image-1',
+          prompt: enhancedPrompt
         });
         
         if (!result.data || !result.data[0] || !result.data[0].b64_json) {
           throw new Error('이미지 생성에 실패했습니다.');
         }
         
-        return NextResponse.json({
+        const response = NextResponse.json({
           success: true,
           image: result.data[0].b64_json,
           type: type
         });
+        
+        // CORS 헤더 추가
+        response.headers.set('Access-Control-Allow-Origin', '*');
+        response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+        
+        return response;
 
       case '이미지 변경':
         if (!images || images.length === 0) {
@@ -328,27 +353,30 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        // 이미지 변경은 현재 DALL-E 3로만 처리 (업로드된 이미지 기반 프롬프트 생성)
+        // 이미지 변경은 현재 gpt-image-1로 처리 (업로드된 이미지 기반 프롬프트 생성)
         const modificationPrompt = await generateStructuredPrompt(prompt, 'modification', images[0]);
         
         const modifiedResult = await openai.images.generate({
-          model: 'dall-e-3',
-          prompt: modificationPrompt,
-          n: 1,
-          response_format: 'b64_json',
-          quality: 'hd',
-          size: '1024x1024'
+          model: 'gpt-image-1',
+          prompt: modificationPrompt
         });
         
         if (!modifiedResult.data || !modifiedResult.data[0] || !modifiedResult.data[0].b64_json) {
           throw new Error('이미지 변경에 실패했습니다.');
         }
         
-        return NextResponse.json({
+        const modifiedResponse = NextResponse.json({
           success: true,
           image: modifiedResult.data[0].b64_json,
           type: type
         });
+        
+        // CORS 헤더 추가
+        modifiedResponse.headers.set('Access-Control-Allow-Origin', '*');
+        modifiedResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        modifiedResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+        
+        return modifiedResponse;
 
       case '이미지 결합':
         if (!images || images.length < 2) {
@@ -358,27 +386,30 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        // 이미지 결합도 현재 DALL-E 3로만 처리 (업로드된 이미지들 기반 프롬프트 생성)
+        // 이미지 결합도 현재 gpt-image-1로 처리 (업로드된 이미지들 기반 프롬프트 생성)
         const combinationPrompt = await generateStructuredPrompt(prompt, 'combination', undefined, images);
         
         const combinedResult = await openai.images.generate({
-          model: 'dall-e-3',
-          prompt: combinationPrompt,
-          n: 1,
-          response_format: 'b64_json',
-          quality: 'hd',
-          size: '1024x1024'
+          model: 'gpt-image-1',
+          prompt: combinationPrompt
         });
         
         if (!combinedResult.data || !combinedResult.data[0] || !combinedResult.data[0].b64_json) {
           throw new Error('이미지 결합에 실패했습니다.');
         }
         
-        return NextResponse.json({
+        const combinedResponse = NextResponse.json({
           success: true,
           image: combinedResult.data[0].b64_json,
           type: type
         });
+        
+        // CORS 헤더 추가
+        combinedResponse.headers.set('Access-Control-Allow-Origin', '*');
+        combinedResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        combinedResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+        
+        return combinedResponse;
 
       default:
         return NextResponse.json(
@@ -434,12 +465,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json(
+    const errorResponse = NextResponse.json(
       { 
         error: error?.message || '이미지 생성 중 오류가 발생했습니다.',
         details: error?.response?.data?.error?.message || error?.message
       },
       { status: 500 }
     );
+    
+    // CORS 헤더 추가
+    errorResponse.headers.set('Access-Control-Allow-Origin', '*');
+    errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    return errorResponse;
   }
 } 
